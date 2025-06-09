@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数学函数探索器</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div class="header-left">
+                    <h1>📊 数学函数探索器</h1>
+                    <p>选择函数类型，调整参数，实时观察函数图像变化</p>
+                </div>
+                <div class="header-right">
+                    <button id="downloadImage" class="header-btn" title="下载图像">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7,10 12,15 17,10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        下载图像
+                    </button>
+                    <button id="printPage" class="header-btn" title="打印页面">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6,9 6,2 18,2 18,9"></polyline>
+                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                            <rect x="6" y="14" width="12" height="8"></rect>
+                        </svg>
+                        打印
+                    </button>
+                    <button id="aboutBtn" class="header-btn" title="关于程序">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9,9h0a3,3,0,0,1,6,0c0,2-3,3-3,3"></path>
+                            <path d="M12,17h0"></path>
+                        </svg>
+                        关于
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- 左侧控制面板 -->
+            <div class="control-panel">
+                <div class="function-selector">
+                    <label for="functionType">选择函数类型：</label>
+                    <select id="functionType">
+                        <option value="sin">正弦函数: y = a·sin(b·x + c) + d</option>
+                        <option value="cos">余弦函数: y = a·cos(b·x + c) + d</option>
+                        <option value="tan">正切函数: y = a·tan(b·x + c) + d</option>
+                        <option value="cot">余切函数: y = a·cot(b·x + c) + d</option>
+                        <option value="quadratic">二次函数: y = a·x² + b·x + c</option>
+                        <option value="linear">一次函数: y = a·x + b</option>
+                        <option value="exponential">指数函数: y = a·e^(b·x) + c</option>
+                        <option value="logarithmic">对数函数: y = a·ln(b·x + c) + d</option>
+                        <option value="power">幂函数: y = a·x^b + c</option>
+                        <option value="absolute">绝对值函数: y = a·|b·x + c| + d</option>
+                        <option value="reciprocal">反比例函数: y = a/(b·x + c) + d</option>
+                        <option value="sqrt">平方根函数: y = a·√(b·x + c) + d</option>
+                        <option value="piecewise">分段函数: y = {ax+b (x<c), dx+e (x≥c)}</option>
+                    </select>
+                </div>
+
+                <div class="custom-function">
+                    <label for="customFunction">或输入自定义函数：</label>
+                    <input type="text" id="customFunction" placeholder="例如: 2*sin(3*x+1)-0.5">
+                    <button id="applyCustom">应用</button>
+                </div>
+
+                <div class="parameters" id="parameters">
+                    <!-- 参数滑块将动态生成 -->
+                    <div class="parameter-controls">
+                        <button id="resetParameters">参数复位</button>
+                    </div>
+                </div>
+
+                <div class="current-expression">
+                    <h3>当前函数表达式：</h3>
+                    <div id="expressionDisplay">y = sin(x)</div>
+                </div>
+
+                <div class="function-properties">
+                    <h3>函数特性分析：</h3>
+                    <div class="properties-content" id="propertiesDisplay">
+                        <div class="property-item">
+                            <span class="property-label">定义域：</span>
+                            <span class="property-value" id="domain">R</span>
+                        </div>
+                        <div class="property-item">
+                            <span class="property-label">值域：</span>
+                            <span class="property-value" id="range">[-1, 1]</span>
+                        </div>
+                        <div class="property-item">
+                            <span class="property-label">奇偶性：</span>
+                            <span class="property-value" id="parity">奇函数</span>
+                        </div>
+                        <div class="property-item">
+                            <span class="property-label">周期性：</span>
+                            <span class="property-value" id="periodicity">周期函数，T = 2π</span>
+                        </div>
+                        <div class="property-item">
+                            <span class="property-label">单调性：</span>
+                            <span class="property-value" id="monotonicity">在[-π/2+2kπ, π/2+2kπ]上递增</span>
+                        </div>
+                        <div class="property-item">
+                            <span class="property-label">零点：</span>
+                            <span class="property-value" id="zeros">x = kπ (k∈Z)</span>
+                        </div>
+                        <div class="property-item">
+                            <span class="property-label">极值：</span>
+                            <span class="property-value" id="extrema">最大值1，最小值-1</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="calculator-section">
+                    <h3>函数值计算器：</h3>
+                    <div class="calculator-controls">
+                        <label for="xInput">输入 X 值：</label>
+                        <input type="number" id="xInput" placeholder="请输入x值" step="0.1">
+                        <button id="calculateY">计算 Y 值</button>
+                        <button id="clearPoint">清除标记点</button>
+                    </div>
+                    <div class="calculation-result">
+                        <span class="result-label">计算结果：</span>
+                        <span class="result-value" id="yResult">请输入X值进行计算</span>
+                    </div>
+                </div>
+
+                <div class="examples-section">
+                    <h3>例题库：</h3>
+                    <div class="examples-controls">
+                        <button id="showExamples">显示例题</button>
+                        <button id="hideExamples">隐藏例题</button>
+                    </div>
+                    <div class="examples-content" id="examplesContent" style="display: none;">
+                        <div class="example-item" id="currentExample">
+                            <!-- 例题内容将动态生成 -->
+                        </div>
+                        <div class="example-navigation">
+                            <button id="prevExample">上一题</button>
+                            <button id="nextExample">下一题</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="graph-controls">
+                    <h3>图像设置：</h3>
+                    <div class="range-controls">
+                        <label>X轴范围：</label>
+                        <input type="number" id="xMin" value="-10" step="0.5"> 到 
+                        <input type="number" id="xMax" value="10" step="0.5">
+                    </div>
+                    <div class="range-controls">
+                        <label>Y轴范围：</label>
+                        <input type="number" id="yMin" value="-5" step="0.5"> 到 
+                        <input type="number" id="yMax" value="5" step="0.5">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧绘图区域 -->
+            <div class="chart-container">
+                <canvas id="functionChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 关于对话框 -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>关于数学函数探索器</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="about-section">
+                    <h3>🎯 核心功能</h3>
+                    <ul>
+                        <li><strong>多种函数类型支持：</strong>正弦、余弦、二次、一次、指数、对数、幂函数、绝对值、反比例、平方根函数</li>
+                        <li><strong>实时参数调节：</strong>通过滑块直观调整函数参数，实时观察图像变化</li>
+                        <li><strong>自定义函数输入：</strong>支持用户输入任意数学表达式</li>
+                        <li><strong>函数特性分析：</strong>自动分析并显示函数的定义域、值域、奇偶性、周期性等数学特性</li>
+                        <li><strong>函数值计算器：</strong>输入x值快速计算对应的y值，并在图像上标记</li>
+                        <li><strong>例题库系统：</strong>提供丰富的数学例题，帮助理解函数概念</li>
+                        <li><strong>图像导出功能：</strong>支持下载函数图像和打印页面</li>
+                    </ul>
+                </div>
+                
+                <div class="about-section">
+                    <h3>📚 学习价值</h3>
+                    <ul>
+                        <li><strong>直观理解：</strong>通过可视化图像帮助学生直观理解函数的性质和变化规律</li>
+                        <li><strong>参数影响：</strong>实时调节参数观察对函数图像的影响，加深对函数变换的理解</li>
+                        <li><strong>数学建模：</strong>培养学生用数学函数描述和解决实际问题的能力</li>
+                        <li><strong>探索学习：</strong>鼓励学生主动探索不同函数的特性，培养数学思维</li>
+                        <li><strong>知识巩固：</strong>通过例题练习巩固函数相关的数学知识</li>
+                    </ul>
+                </div>
+                
+                <div class="about-section">
+                    <h3>👨‍💻 开发信息</h3>
+                    <div class="developer-info">
+                        <p><strong>开发者：</strong>雷雨涵</p>
+                        <p><strong>学校：</strong>兰州市第五十一中学</p>
+                        <p><strong>班级：</strong>高一九班</p>
+                        <p><strong>版本：</strong>v1.0</p>
+                        <p><strong>开发日期：</strong>2025年6月</p>
+                    </div>
+                </div>
+                
+                <div class="about-section">
+                    <h3>📄 版权声明</h3>
+                    <div class="copyright-info">
+                        <p><strong>版权所有：</strong>© 2025 雷雨涵 保留所有权利</p>
+                        <p><strong>许可协议：</strong>本软件仅供教育和学习使用</p>
+                        <p><strong>免责声明：</strong>本软件按"现状"提供，不提供任何明示或暗示的保证</p>
+                        <p><strong>使用条款：</strong>禁止用于商业用途，允许在教育环境中自由使用和分享</p>
+                        <p><strong>技术支持：</strong>基于现代Web技术构建，使用Chart.js图表库</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
