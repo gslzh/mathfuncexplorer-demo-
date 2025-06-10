@@ -12,6 +12,17 @@ class FunctionPlotter {
         // 例题库相关
         this.currentExampleIndex = 0;
         this.examplesVisible = false;
+        this.examplesManager = new ExamplesManager();
+        this.currentExampleSource = 'external'; // 'external', 'builtin', 'all'
+        this.filteredExamples = [];
+        this.currentFilter = {
+            difficulty: 'all',
+            search: '',
+            source: 'external'
+        };
+        
+        // 初始化例题库
+        this.initializeExamplesDatabase();
         
         // 预定义函数配置
         this.functionConfigs = {
@@ -483,6 +494,27 @@ class FunctionPlotter {
             this.hideExamples();
         });
         
+        // 新增的例题库控件事件监听
+        document.getElementById('difficultyFilter').addEventListener('change', (e) => {
+            this.currentFilter.difficulty = e.target.value;
+            this.applyFilters();
+        });
+        
+        document.getElementById('sourceFilter').addEventListener('change', (e) => {
+            this.currentFilter.source = e.target.value;
+            this.applyFilters();
+        });
+        
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            this.performSearch();
+        });
+        
+        document.getElementById('exampleSearch').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.performSearch();
+            }
+        });
+        
         document.getElementById('prevExample').addEventListener('click', () => {
             this.showPreviousExample();
         });
@@ -510,10 +542,10 @@ class FunctionPlotter {
         this.removeCalculationPoint(); // 清除之前的计算点
         this.updateChart();
         
-        // 如果例题库是显示状态，更新例题内容
+        // 如果例题库是显示状态，重新应用筛选条件
         if (this.examplesVisible) {
             this.currentExampleIndex = 0;
-            this.updateCurrentExample();
+            this.applyFilters();
         }
     }
     
@@ -522,7 +554,11 @@ class FunctionPlotter {
         container.innerHTML = '';
         
         const config = this.functionConfigs[this.currentFunction];
-        if (!config) return;
+        if (!config) {
+            // 如果没有配置，只显示参数复位按钮容器
+            this.addParameterControlsButton(container);
+            return;
+        }
         
         Object.keys(config.params).forEach(paramName => {
             const param = config.params[paramName];
@@ -562,6 +598,22 @@ class FunctionPlotter {
                     this.calculateYValue();
                 }
             });
+        });
+        
+        // 添加参数控制按钮
+        this.addParameterControlsButton(container);
+    }
+    
+    addParameterControlsButton(container) {
+        // 创建参数控制按钮容器
+        const controlsDiv = document.createElement('div');
+        controlsDiv.className = 'parameter-controls';
+        controlsDiv.innerHTML = '<button id="resetParameters">参数复位</button>';
+        container.appendChild(controlsDiv);
+        
+        // 重新绑定参数复位按钮事件
+        document.getElementById('resetParameters').addEventListener('click', () => {
+            this.resetParameters();
         });
     }
     
@@ -632,8 +684,8 @@ class FunctionPlotter {
                 datasets: [{
                     label: '函数图像',
                     data: [],
-                    borderColor: '#667eea',
-                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
                     borderWidth: 3,
                     fill: false,
                     pointRadius: 0,
@@ -755,8 +807,11 @@ class FunctionPlotter {
             this.currentFunction = 'custom';
             this.parameters = {};
             
-            document.getElementById('parameters').innerHTML = 
-                '<p style="text-align: center; color: #6c757d; font-style: italic;">自定义函数无参数控制</p>';
+            const container = document.getElementById('parameters');
+            container.innerHTML = '<p style="text-align: center; color: #6c757d; font-style: italic;">自定义函数无参数控制</p>';
+            
+            // 即使是自定义函数也添加参数复位按钮
+            this.addParameterControlsButton(container);
             
             document.getElementById('expressionDisplay').textContent = input;
             this.updateChart();
@@ -834,8 +889,8 @@ class FunctionPlotter {
             this.chart.data.datasets.push({
                 label: '计算点',
                 data: [],
-                borderColor: '#ff4757',
-                backgroundColor: '#ff4757',
+                borderColor: '#ffc107',
+                backgroundColor: '#ffc107',
                 borderWidth: 3,
                 fill: false,
                 pointRadius: 8,
@@ -918,7 +973,129 @@ class FunctionPlotter {
         this.updateChart();
     }
     
-    getExamplesForFunction() {
+    // 初始化例题库数据库
+    async initializeExamplesDatabase() {
+        const statusElement = document.getElementById('examplesStatus');
+        const statusText = statusElement.querySelector('.status-text');
+        
+        try {
+            statusText.textContent = '正在加载例题库...';
+            statusText.style.color = '#666';
+            
+            await this.examplesManager.loadDatabase();
+            
+            statusText.textContent = '例题库加载成功';
+            statusText.style.color = '#4CAF50';
+            
+            // 如果例题库已显示，更新内容
+            if (this.examplesVisible) {
+                this.applyFilters();
+            }
+            
+        } catch (error) {
+            console.error('例题库初始化失败:', error);
+            statusText.textContent = '例题库加载失败，使用内置例题';
+            statusText.style.color = '#f44336';
+        }
+    }
+    
+    // 应用筛选条件
+    applyFilters() {
+        let examples = [];
+        
+        // 根据来源获取例题
+        if (this.currentFilter.source === 'external') {
+            examples = this.getExternalExamples();
+        } else if (this.currentFilter.source === 'builtin') {
+            examples = this.getBuiltinExamples();
+        } else {
+            examples = [...this.getExternalExamples(), ...this.getBuiltinExamples()];
+        }
+        
+        // 应用难度筛选
+        if (this.currentFilter.difficulty !== 'all') {
+            examples = examples.filter(ex => ex.difficulty === this.currentFilter.difficulty);
+        }
+        
+        // 应用搜索筛选
+        if (this.currentFilter.search) {
+            const keyword = this.currentFilter.search.toLowerCase();
+            examples = examples.filter(ex => {
+                return ex.title.toLowerCase().includes(keyword) ||
+                       (ex.question.text || ex.question).toLowerCase().includes(keyword) ||
+                       (ex.tags && ex.tags.some(tag => tag.toLowerCase().includes(keyword)));
+            });
+        }
+        
+        this.filteredExamples = examples;
+        this.currentExampleIndex = 0;
+        
+        // 更新统计信息
+        this.updateExamplesStats();
+        
+        // 更新当前例题显示
+        if (this.examplesVisible) {
+            this.updateCurrentExample();
+        }
+    }
+    
+    // 执行搜索
+    performSearch() {
+        const searchInput = document.getElementById('exampleSearch');
+        this.currentFilter.search = searchInput.value.trim();
+        this.applyFilters();
+    }
+    
+    // 获取外置例题
+    getExternalExamples() {
+        if (!this.examplesManager.isReady()) {
+            return [];
+        }
+        return this.examplesManager.getExamplesForFunction(this.currentFunction);
+    }
+    
+    // 获取内置例题（保持原有格式）
+    getBuiltinExamples() {
+        return this.getBuiltinExamplesForFunction();
+    }
+    
+    // 更新例题统计信息
+    updateExamplesStats() {
+        const statsElement = document.getElementById('examplesStats');
+        const total = this.filteredExamples.length;
+        
+        if (total === 0) {
+            statsElement.style.display = 'none';
+            return;
+        }
+        
+        const stats = {
+            total: total,
+            external: this.filteredExamples.filter(ex => ex.id).length,
+            builtin: this.filteredExamples.filter(ex => !ex.id).length,
+            byDifficulty: {}
+        };
+        
+        this.filteredExamples.forEach(ex => {
+            const difficulty = ex.difficulty || '基础';
+            stats.byDifficulty[difficulty] = (stats.byDifficulty[difficulty] || 0) + 1;
+        });
+        
+        let statsHTML = `
+            <span class="stats-item">总计: ${stats.total}题</span>
+            <span class="stats-item">外置: ${stats.external}题</span>
+            <span class="stats-item">内置: ${stats.builtin}题</span>
+        `;
+        
+        Object.entries(stats.byDifficulty).forEach(([difficulty, count]) => {
+            statsHTML += `<span class="stats-item">${difficulty}: ${count}题</span>`;
+        });
+        
+        statsElement.innerHTML = statsHTML;
+        statsElement.style.display = 'block';
+    }
+    
+    getBuiltinExamplesForFunction() {
         const examples = {
             sin: [
                 {
@@ -968,14 +1145,44 @@ class FunctionPlotter {
             ]
         };
         
-        return examples[this.currentFunction] || [];
+        // 为内置例题添加默认属性以兼容新系统
+        const builtinExamples = examples[this.currentFunction] || [];
+        return builtinExamples.map(example => ({
+            ...example,
+            difficulty: example.difficulty || '基础',
+            tags: example.tags || ['基础概念'],
+            question: {
+                text: example.question,
+                type: '基础练习'
+            },
+            solution: {
+                steps: [{
+                    step: 1,
+                    title: '解答',
+                    content: example.solution
+                }],
+                finalAnswer: example.solution
+            },
+            concepts: [{
+                name: example.explanation ? '知识点' : '基础概念',
+                definition: example.explanation || '基础数学概念',
+                importance: '理解函数基本性质'
+            }]
+        }));
+    }
+    
+    // 获取当前筛选后的例题列表
+    getCurrentExamples() {
+        return this.filteredExamples.length > 0 ? this.filteredExamples : this.getBuiltinExamples();
     }
     
     showExamples() {
         this.examplesVisible = true;
         this.currentExampleIndex = 0;
         document.getElementById('examplesContent').style.display = 'block';
-        this.updateCurrentExample();
+        
+        // 应用当前筛选条件
+        this.applyFilters();
     }
     
     hideExamples() {
@@ -984,7 +1191,7 @@ class FunctionPlotter {
     }
     
     showPreviousExample() {
-        const examples = this.getExamplesForFunction();
+        const examples = this.getCurrentExamples();
         if (examples.length > 0) {
             this.currentExampleIndex = (this.currentExampleIndex - 1 + examples.length) % examples.length;
             this.updateCurrentExample();
@@ -992,7 +1199,7 @@ class FunctionPlotter {
     }
     
     showNextExample() {
-        const examples = this.getExamplesForFunction();
+        const examples = this.getCurrentExamples();
         if (examples.length > 0) {
             this.currentExampleIndex = (this.currentExampleIndex + 1) % examples.length;
             this.updateCurrentExample();
@@ -1000,40 +1207,71 @@ class FunctionPlotter {
     }
     
     updateCurrentExample() {
-        const examples = this.getExamplesForFunction();
+        const examples = this.getCurrentExamples();
         const exampleElement = document.getElementById('currentExample');
         const prevButton = document.getElementById('prevExample');
         const nextButton = document.getElementById('nextExample');
+        const counterElement = document.getElementById('exampleCounter');
         
         if (examples.length === 0) {
             exampleElement.innerHTML = `
                 <div class="example-title">暂无例题</div>
-                <div class="example-question">当前函数类型暂无例题，请选择其他函数类型查看例题。</div>
+                <div class="example-question">当前筛选条件下暂无例题，请调整筛选条件或选择其他函数类型。</div>
             `;
             prevButton.disabled = true;
             nextButton.disabled = true;
+            counterElement.textContent = '0/0';
             return;
         }
         
         const example = examples[this.currentExampleIndex];
-        exampleElement.innerHTML = `
-            <div class="example-title">${example.title} (${this.currentExampleIndex + 1}/${examples.length})</div>
-            <div class="example-question">
-                <strong>题目：</strong><br>
-                ${example.question.replace(/\n/g, '<br>')}
-            </div>
-            <div class="example-solution">
-                <strong>解答：</strong><br>
-                ${example.solution.replace(/\n/g, '<br>')}
-            </div>
-            <div class="example-explanation">
-                <strong>知识点解析：</strong><br>
-                ${example.explanation.replace(/\n/g, '<br>')}
-            </div>
-        `;
+        
+        // 检查是否为新格式的外置例题
+        if (example.id && this.examplesManager.isReady()) {
+            // 使用例题管理器的格式化方法
+            exampleElement.innerHTML = this.examplesManager.formatExampleToHTML(example);
+        } else {
+            // 兼容内置例题的简单格式
+            const questionText = example.question.text || example.question;
+            const solutionText = example.solution.finalAnswer || example.solution;
+            const explanationText = example.concepts?.[0]?.definition || example.explanation || '';
+            
+            exampleElement.innerHTML = `
+                <div class="example-header">
+                    <div class="example-title">${example.title}</div>
+                    <div class="example-meta">
+                        <span class="difficulty difficulty-${example.difficulty?.toLowerCase() || '基础'}">${example.difficulty || '基础'}</span>
+                        <div class="tags">
+                            ${(example.tags || ['基础概念']).map(tag => `<span class="tag">${tag}</span>`).join('')}
+                        </div>
+                    </div>
+                </div>
+                <div class="example-question">
+                    <h4>📝 题目</h4>
+                    <div class="question-content">
+                        ${questionText.replace(/\n/g, '<br>')}
+                    </div>
+                </div>
+                <div class="example-solution">
+                    <h4>💡 解答</h4>
+                    <div class="final-answer">
+                        <div class="answer-content">${solutionText.replace(/\n/g, '<br>')}</div>
+                    </div>
+                </div>
+                ${explanationText ? `
+                    <div class="example-concepts">
+                        <h4>📚 知识点解析</h4>
+                        <div class="concept-item">
+                            <div class="concept-definition">${explanationText.replace(/\n/g, '<br>')}</div>
+                        </div>
+                    </div>
+                ` : ''}
+            `;
+        }
         
         prevButton.disabled = examples.length <= 1;
         nextButton.disabled = examples.length <= 1;
+        counterElement.textContent = `${this.currentExampleIndex + 1}/${examples.length}`;
     }
     
     // 下载图像功能
@@ -1073,146 +1311,72 @@ class FunctionPlotter {
     // 打印页面
     printPage() {
         try {
-            // 获取图表画布
-            const canvas = this.chart.canvas;
-            
-            // 创建高分辨率的临时canvas用于打印
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            
-            // 设置更高的分辨率
-            const scale = 3;
-            tempCanvas.width = canvas.width * scale;
-            tempCanvas.height = canvas.height * scale;
-            
-            // 设置高质量渲染
-            tempCtx.imageSmoothingEnabled = true;
-            tempCtx.imageSmoothingQuality = 'high';
-            
-            // 缩放上下文
-            tempCtx.scale(scale, scale);
-            
-            // 绘制白色背景
-            tempCtx.fillStyle = 'white';
-            tempCtx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // 将原canvas内容绘制到临时canvas
-            tempCtx.drawImage(canvas, 0, 0);
-            
-            // 获取高质量图像数据
-            const imageDataUrl = tempCanvas.toDataURL('image/png', 1.0);
-            
-            // 尝试打开新窗口，如果失败则使用当前窗口
-            let printWindow;
-            try {
-                printWindow = window.open('', '_blank', 'width=800,height=600');
-            } catch (e) {
-                console.warn('无法打开新窗口，使用当前窗口打印');
-            }
-            
-            if (!printWindow) {
-                // 如果无法打开新窗口，在当前页面创建打印内容
-                this.printInCurrentWindow(imageDataUrl);
+            // 检查图表是否存在
+            if (!this.chart || !this.chart.canvas) {
+                alert('图表未加载，无法打印');
                 return;
             }
             
-            printWindow.document.write(`
+            // 获取图表画布
+            const canvas = this.chart.canvas;
+            
+            // 直接使用原始canvas，避免复杂的缩放操作
+            const imageDataUrl = canvas.toDataURL('image/png', 1.0);
+            
+            console.log('准备打印，图像数据长度:', imageDataUrl.length);
+            console.log('当前函数:', this.currentFunction);
+            
+            // 尝试打开新窗口
+            const printWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes');
+            
+            if (!printWindow) {
+                alert('浏览器阻止了弹窗，请允许弹窗后重试');
+                return;
+            }
+            
+            console.log('新窗口已打开');
+            
+            const htmlContent = `<!DOCTYPE html>
                 <html>
                     <head>
                         <title>函数图像打印</title>
+                        <meta charset="UTF-8">
                         <style>
-                            body {
-                                margin: 0;
-                                padding: 20px;
-                                display: flex;
-                                flex-direction: column;
-                                align-items: center;
-                                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                                background: white;
-                            }
-                            .print-header {
-                                text-align: center;
-                                margin-bottom: 20px;
-                            }
-                            .print-header h1 {
-                                color: #2c3e50;
-                                margin: 0 0 10px 0;
-                                font-size: 24px;
-                            }
-                            .print-header p {
-                                color: #7f8c8d;
-                                margin: 5px 0;
-                                font-size: 14px;
-                            }
-                            .chart-container {
-                                border: 2px solid #ddd;
-                                border-radius: 8px;
-                                padding: 10px;
-                                background: white;
-                                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                            }
-                            .chart-image {
-                                max-width: 100%;
-                                height: auto;
-                                display: block;
-                            }
-                            @media print {
-                                body { 
-                                    margin: 0;
-                                    padding: 10px;
-                                }
-                                .chart-container { 
-                                    border: 1px solid #000;
-                                    box-shadow: none;
-                                }
-                                .print-header h1 {
-                                    color: #000;
-                                }
-                                .print-header p {
-                                    color: #000;
-                                }
-                            }
+                            body { margin: 20px; text-align: center; font-family: Arial, sans-serif; }
+                            h1 { color: #333; margin-bottom: 10px; }
+                            p { color: #666; margin: 5px 0; }
+                            img { max-width: 100%; border: 1px solid #ccc; margin: 20px 0; }
                         </style>
                     </head>
                     <body>
-                        <div class="print-header">
-                            <h1>数学函数图像</h1>
-                            <p>函数: ${this.functions[this.currentFunction].expression}</p>
-                            <p>生成时间: ${new Date().toLocaleString()}</p>
-                        </div>
-                        <div class="chart-container">
-                            <img src="${imageDataUrl}" class="chart-image" alt="函数图像" />
-                        </div>
+                        <h1>数学函数图像</h1>
+                        <p>函数: ${this.functionConfigs[this.currentFunction] ? this.functionConfigs[this.currentFunction].expression : this.currentFunction}</p>
+                        <p>生成时间: ${new Date().toLocaleString()}</p>
+                        <img src="${imageDataUrl}" alt="函数图像" onload="console.log('图像加载成功')" onerror="console.log('图像加载失败')" />
+                        <script>
+                            console.log('打印页面HTML已加载');
+                            window.onload = function() {
+                                console.log('页面完全加载完成');
+                                setTimeout(function() {
+                                    console.log('开始打印');
+                                    window.print();
+                                }, 1000);
+                            };
+                        </script>
                     </body>
-                </html>
-            `);
+                </html>`;
+            
+            console.log('写入HTML内容');
+            printWindow.document.write(htmlContent);
             
             printWindow.document.close();
-            
-            // 等待图像加载完成后打印
-            const img = printWindow.document.querySelector('.chart-image');
-            img.onload = function() {
-                setTimeout(() => {
-                    printWindow.print();
-                    setTimeout(() => {
-                        printWindow.close();
-                    }, 1000);
-                }, 500);
-            };
-            
-            // 如果图像已经加载，直接打印
-            if (img.complete) {
-                setTimeout(() => {
-                    printWindow.print();
-                    setTimeout(() => {
-                        printWindow.close();
-                    }, 1000);
-                }, 500);
-            }
+            console.log('HTML内容写入完成，等待页面加载');
             
         } catch (error) {
             console.error('打印功能出错:', error);
-            alert('打印功能出现错误，请稍后重试');
+            // 如果新窗口打印失败，尝试当前窗口打印
+            console.log('尝试使用当前窗口打印...');
+            this.printInCurrentWindow(imageDataUrl);
         }
     }
     
@@ -1236,15 +1400,42 @@ class FunctionPlotter {
         // 替换页面内容
         document.body.innerHTML = printContent;
         
-        // 打印
-        window.print();
-        
-        // 恢复原始内容
+        // 确保内容渲染完成后打印
         setTimeout(() => {
-            document.body.innerHTML = originalContent;
-            // 重新初始化页面（因为事件监听器可能丢失）
-            new FunctionPlotter();
-        }, 1000);
+            try {
+                // 调用系统打印对话框
+                window.print();
+                
+                // 监听打印完成事件
+                const handleAfterPrint = () => {
+                    console.log('打印完成，恢复原始内容');
+                    // 恢复原始内容
+                    document.body.innerHTML = originalContent;
+                    // 重新初始化应用 - 使用全局变量而不是创建新实例
+                    window.location.reload();
+                    // 移除事件监听器
+                    window.removeEventListener('afterprint', handleAfterPrint);
+                };
+                
+                window.addEventListener('afterprint', handleAfterPrint);
+                
+                // 备用恢复机制（如果用户取消打印或浏览器不支持afterprint事件）
+                setTimeout(() => {
+                    if (document.body.innerHTML.includes('数学函数图像')) {
+                        console.log('打印超时，强制恢复');
+                        handleAfterPrint();
+                    }
+                }, 5000);
+                
+            } catch (e) {
+                console.error('打印调用失败:', e);
+                alert('无法调用打印功能: ' + e.message);
+                // 恢复原始内容
+                document.body.innerHTML = originalContent;
+                // 使用页面刷新代替创建新实例
+                window.location.reload();
+            }
+        }, 100);
     }
     
     // 显示关于对话框
