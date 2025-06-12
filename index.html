@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
     <script src="examples-manager.js"></script>
 </head>
 <body>
@@ -67,7 +68,7 @@
                         <option value="absolute">绝对值函数: y = a·|b·x + c| + d</option>
                         <option value="reciprocal">反比例函数: y = a/(b·x + c) + d</option>
                         <option value="sqrt">平方根函数: y = a·√(b·x + c) + d</option>
-                        <option value="piecewise">分段函数: y = {ax+b (x<c), dx+e (x≥c)}</option>
+                        <option value="piecewise">分段函数: y = {f₁(x) (x<c), f₂(x) (x≥c)}</option>
                     </select>
                 </div>
 
@@ -75,6 +76,68 @@
                     <label for="customFunction">或输入自定义函数：</label>
                     <input type="text" id="customFunction" placeholder="例如: 2*sin(3*x+1)-0.5">
                     <button id="applyCustom">应用</button>
+                </div>
+
+                <div class="multi-function-section">
+                    <h3>多函数对比：</h3>
+                    <div class="multi-function-controls">
+                        <button id="addFunction">添加函数</button>
+                        <button id="clearAllFunctions">清除所有</button>
+                        <div class="function-list" id="functionList">
+                            <!-- 动态生成的函数列表 -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tangent-normal-section">
+                    <h3>切线与法线：</h3>
+                    <div class="tangent-controls">
+                        <label for="tangentX">切点X坐标：</label>
+                        <input type="number" id="tangentX" placeholder="输入X值" step="0.1" value="0">
+                        <button id="showTangent">显示切线</button>
+                        <button id="showNormal">显示法线</button>
+                        <button id="hideTangentNormal">隐藏切线法线</button>
+                    </div>
+                    <div class="tangent-info" id="tangentInfo">
+                        <div class="info-item">
+                            <span class="info-label">切点坐标：</span>
+                            <span class="info-value" id="tangentPoint">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">切线斜率：</span>
+                            <span class="info-value" id="tangentSlope">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">切线方程：</span>
+                            <span class="info-value" id="tangentEquation">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">法线方程：</span>
+                            <span class="info-value" id="normalEquation">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 零点极值点标注 -->
+                <div class="critical-points-section">
+                    <h3>零点与极值点标注：</h3>
+                    <div class="critical-points-controls">
+                        <button id="showZeros">显示零点</button>
+                        <button id="showExtrema">显示极值点</button>
+                        <button id="hideCriticalPoints">隐藏所有标注</button>
+                    </div>
+                    <div class="critical-points-info" id="criticalPointsInfo">
+                        <div class="points-list">
+                            <div class="points-group">
+                                <h4>零点：</h4>
+                                <div class="points-content" id="zerosList">暂无数据</div>
+                            </div>
+                            <div class="points-group">
+                                <h4>极值点：</h4>
+                                <div class="points-content" id="extremaList">暂无数据</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="parameters" id="parameters">

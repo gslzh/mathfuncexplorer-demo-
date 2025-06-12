@@ -22,24 +22,71 @@ class ExamplesManager {
     }
 
     async _fetchDatabase() {
+        // 尝试加载主例题库文件
         try {
-            const response = await fetch('./examples-database.json');
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
+            console.log('开始加载主例题库...');
+            const response = await fetch('./examples-database.json', {
+                signal: controller.signal,
+                cache: 'no-cache'
+            });
+            
+            clearTimeout(timeoutId);
+            
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
+            
+            console.log('正在解析JSON数据...');
             this.database = await response.json();
             this.isLoaded = true;
-            console.log('例题库加载成功:', this.database.metadata);
+            console.log('主例题库加载成功:', this.database.metadata);
+            console.log('加载的例题分类:', Object.keys(this.database.categories));
             return this.database;
         } catch (error) {
-            console.error('例题库加载失败:', error);
-            // 返回空的数据库结构，确保程序正常运行
-            this.database = {
-                metadata: { version: '0.0', description: '加载失败，使用内置例题' },
-                categories: {}
-            };
-            this.isLoaded = false;
-            throw error;
+            console.warn('主例题库加载失败，尝试加载备用例题库:', error);
+            
+            // 尝试加载修复版例题库
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                
+                console.log('开始加载备用例题库...');
+                const response = await fetch('./examples-database-fixed.json', {
+                    signal: controller.signal,
+                    cache: 'no-cache'
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                console.log('正在解析JSON数据...');
+                this.database = await response.json();
+                this.isLoaded = true;
+                console.log('备用例题库加载成功:', this.database.metadata);
+                console.log('加载的例题分类:', Object.keys(this.database.categories));
+                return this.database;
+            } catch (backupError) {
+                console.error('备用例题库也加载失败:', backupError);
+                console.error('错误详情:', {
+                    name: backupError.name,
+                    message: backupError.message,
+                    stack: backupError.stack
+                });
+                
+                // 返回空的数据库结构，确保程序正常运行
+                this.database = {
+                    metadata: { version: '0.0', description: '加载失败，使用内置例题' },
+                    categories: {}
+                };
+                this.isLoaded = false;
+                throw backupError;
+            }
         }
     }
 

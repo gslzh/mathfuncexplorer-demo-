@@ -9,6 +9,24 @@ class FunctionPlotter {
         this.yMin = -5;
         this.yMax = 5;
         
+        // 多函数对比相关
+        this.multiFunctions = [];
+        this.functionColors = ['#dc3545', '#28a745', '#007bff', '#ffc107', '#6f42c1', '#fd7e14', '#20c997', '#e83e8c'];
+        this.colorIndex = 0;
+        
+        // 切线法线相关
+        this.showingTangent = false;
+        this.showingNormal = false;
+        this.tangentX = 0;
+        
+        // 零点极值点标注相关
+        this.showingZeros = false;
+        this.showingExtrema = false;
+        this.criticalPoints = {
+            zeros: [],
+            extrema: []
+        };
+        
         // 例题库相关
         this.currentExampleIndex = 0;
         this.examplesVisible = false;
@@ -485,6 +503,48 @@ class FunctionPlotter {
             }
         });
         
+        // 多函数对比功能
+        document.getElementById('addFunction').addEventListener('click', () => {
+            this.addCurrentFunction();
+        });
+        
+        document.getElementById('clearAllFunctions').addEventListener('click', () => {
+            this.clearAllFunctions();
+        });
+        
+        // 切线法线功能
+        document.getElementById('showTangent').addEventListener('click', () => {
+            this.showTangentLine();
+        });
+        
+        document.getElementById('showNormal').addEventListener('click', () => {
+            this.showNormalLine();
+        });
+        
+        document.getElementById('hideTangentNormal').addEventListener('click', () => {
+            this.hideTangentNormal();
+        });
+        
+        document.getElementById('tangentX').addEventListener('input', (e) => {
+            this.tangentX = parseFloat(e.target.value) || 0;
+            if (this.showingTangent || this.showingNormal) {
+                this.updateTangentNormal();
+            }
+        });
+        
+        // 零点极值点标注功能
+        document.getElementById('showZeros').addEventListener('click', () => {
+            this.showZeros();
+        });
+        
+        document.getElementById('showExtrema').addEventListener('click', () => {
+            this.showExtrema();
+        });
+        
+        document.getElementById('hideCriticalPoints').addEventListener('click', () => {
+            this.hideCriticalPoints();
+        });
+        
         // 例题库功能
         document.getElementById('showExamples').addEventListener('click', () => {
             this.showExamples();
@@ -692,6 +752,15 @@ class FunctionPlotter {
                     pointHoverRadius: 5,
                     tension: 0.4,
                     cubicInterpolationMode: 'monotone'
+                }, {
+                    label: '交互点',
+                    data: [],
+                    borderColor: '#28a745',
+                    backgroundColor: '#28a745',
+                    borderWidth: 2,
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                    showLine: false
                 }]
             },
             options: {
@@ -708,8 +777,25 @@ class FunctionPlotter {
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                return `(${context.parsed.x.toFixed(2)}, ${context.parsed.y.toFixed(2)})`;
+                                return `(${context.parsed.x.toFixed(3)}, ${context.parsed.y.toFixed(3)})`;
                             }
+                        }
+                    },
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'xy',
+                            threshold: 10
+                        },
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                                speed: 0.1
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'xy'
                         }
                     }
                 },
@@ -743,8 +829,19 @@ class FunctionPlotter {
                 },
                 animation: {
                     duration: 300
+                },
+                onClick: (event, elements) => {
+                    this.handleChartClick(event, elements);
+                },
+                onHover: (event, elements) => {
+                    event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
                 }
             }
+        });
+        
+        // 添加双击重置功能
+        ctx.canvas.addEventListener('dblclick', () => {
+            this.resetZoom();
         });
     }
     
@@ -839,6 +936,17 @@ class FunctionPlotter {
         
         // 创建函数
         return new Function('x', `return ${code};`);
+    }
+    
+    getExpressionText() {
+        const config = this.functionConfigs[this.currentFunction];
+        if (!config) return '未知函数';
+        
+        if (this.currentFunction === 'custom') {
+            return document.getElementById('customFunction').value || '自定义函数';
+        }
+        
+        return document.getElementById('expressionDisplay').textContent || config.expression;
     }
     
     calculateYValue() {
@@ -1451,9 +1559,569 @@ class FunctionPlotter {
         modal.style.display = 'none';
         document.body.style.overflow = 'auto';
     }
+    
+    // 处理图表点击事件
+    handleChartClick(event, elements) {
+        if (!this.chart) return;
+        
+        const canvasPosition = Chart.helpers.getRelativePosition(event, this.chart);
+        const dataX = this.chart.scales.x.getValueForPixel(canvasPosition.x);
+        const dataY = this.chart.scales.y.getValueForPixel(canvasPosition.y);
+        
+        // 计算函数在点击位置的实际值
+        const config = this.functionConfigs[this.currentFunction];
+        if (config) {
+            try {
+                const actualY = config.calculate(dataX, this.parameters);
+                
+                // 更新或添加交互点
+                if (this.chart.data.datasets.length < 2) {
+                    // 添加交互点数据集
+                    this.chart.data.datasets.push({
+                        label: '交互点',
+                        data: [],
+                        backgroundColor: '#ff6b6b',
+                        borderColor: '#ff6b6b',
+                        pointRadius: 8,
+                        pointHoverRadius: 10,
+                        showLine: false,
+                        pointStyle: 'circle'
+                    });
+                }
+                
+                // 设置交互点位置
+                this.chart.data.datasets[1].data = [{
+                    x: dataX,
+                    y: actualY
+                }];
+                
+                this.chart.update('none');
+                
+                // 显示点的信息
+                console.log(`点击位置: (${dataX.toFixed(3)}, ${actualY.toFixed(3)})`);
+                
+            } catch (e) {
+                console.error('计算函数值时出错:', e);
+            }
+        }
+    }
+    
+    // 重置缩放
+    resetZoom() {
+        if (this.chart && this.chart.resetZoom) {
+            this.chart.resetZoom();
+        } else {
+            // 手动重置到默认范围
+            this.xMin = -10;
+            this.xMax = 10;
+            this.yMin = -10;
+            this.yMax = 10;
+            
+            // 更新范围输入框
+            document.getElementById('xMin').value = this.xMin;
+            document.getElementById('xMax').value = this.xMax;
+            document.getElementById('yMin').value = this.yMin;
+            document.getElementById('yMax').value = this.yMax;
+            
+            this.updateChart();
+         }
+     }
+     
+     // 多函数对比功能
+     addCurrentFunction() {
+         const config = this.functionConfigs[this.currentFunction];
+         if (!config) return;
+         
+         const functionData = {
+             id: Date.now(),
+             type: this.currentFunction,
+             name: config.name,
+             expression: this.getExpressionText(),
+             parameters: { ...this.parameters },
+             color: this.functionColors[this.colorIndex % this.functionColors.length],
+             config: config
+         };
+         
+         this.multiFunctions.push(functionData);
+         this.colorIndex++;
+         
+         this.updateFunctionList();
+         this.updateMultiChart();
+     }
+     
+     clearAllFunctions() {
+         this.multiFunctions = [];
+         this.colorIndex = 0;
+         this.updateFunctionList();
+         this.updateChart(); // 恢复单函数显示
+     }
+     
+     updateFunctionList() {
+         const listContainer = document.getElementById('functionList');
+         listContainer.innerHTML = '';
+         
+         this.multiFunctions.forEach(func => {
+             const item = document.createElement('div');
+             item.className = 'function-item';
+             item.innerHTML = `
+                 <div style="display: flex; align-items: center;">
+                     <div class="function-color" style="background-color: ${func.color};"></div>
+                     <span class="function-name">${func.name}</span>
+                 </div>
+                 <button class="remove-btn" onclick="window.functionPlotter.removeFunction(${func.id})">删除</button>
+             `;
+             listContainer.appendChild(item);
+         });
+     }
+     
+     removeFunction(id) {
+         this.multiFunctions = this.multiFunctions.filter(func => func.id !== id);
+         this.updateFunctionList();
+         this.updateMultiChart();
+     }
+     
+     updateMultiChart() {
+         if (!this.chart) return;
+         
+         // 清除现有数据集（保留交互点）
+         const interactiveDatasets = this.chart.data.datasets.filter(dataset => 
+             dataset.label === '交互点' || dataset.label === '切线' || dataset.label === '法线'
+         );
+         this.chart.data.datasets = [...interactiveDatasets];
+         
+         // 添加多函数数据集
+         this.multiFunctions.forEach(func => {
+             const points = [];
+             const step = (this.xMax - this.xMin) / 2000;
+             
+             for (let x = this.xMin; x <= this.xMax; x += step) {
+                 try {
+                     const y = func.config.calculate(x, func.parameters);
+                     if (!isNaN(y) && isFinite(y)) {
+                         points.push({ x: x, y: y });
+                     }
+                 } catch (e) {
+                     // 忽略计算错误
+                 }
+             }
+             
+             this.chart.data.datasets.unshift({
+                 label: func.name,
+                 data: points,
+                 borderColor: func.color,
+                 backgroundColor: func.color + '20',
+                 borderWidth: 2,
+                 fill: false,
+                 pointRadius: 0,
+                 pointHoverRadius: 3,
+                 tension: 0.4
+             });
+         });
+         
+         // 如果没有多函数，显示当前函数
+         if (this.multiFunctions.length === 0) {
+             this.updateChart();
+             return;
+         }
+         
+         this.chart.update('none');
+     }
+     
+     // 切线法线功能
+     showTangentLine() {
+         this.showingTangent = true;
+         this.updateTangentNormal();
+     }
+     
+     showNormalLine() {
+         this.showingNormal = true;
+         this.updateTangentNormal();
+     }
+     
+     hideTangentNormal() {
+         this.showingTangent = false;
+         this.showingNormal = false;
+         this.removeTangentNormalFromChart();
+         this.clearTangentInfo();
+     }
+     
+     updateTangentNormal() {
+         if (!this.chart || (!this.showingTangent && !this.showingNormal)) return;
+         
+         const config = this.functionConfigs[this.currentFunction];
+         if (!config) return;
+         
+         try {
+             const x = this.tangentX;
+             const y = config.calculate(x, this.parameters);
+             
+             if (isNaN(y) || !isFinite(y)) {
+                 this.clearTangentInfo();
+                 return;
+             }
+             
+             // 计算导数（数值微分）
+             const h = 0.0001;
+             const y1 = config.calculate(x - h, this.parameters);
+             const y2 = config.calculate(x + h, this.parameters);
+             const slope = (y2 - y1) / (2 * h);
+             
+             if (isNaN(slope) || !isFinite(slope)) {
+                 this.clearTangentInfo();
+                 return;
+             }
+             
+             // 更新切线法线信息
+             this.updateTangentInfo(x, y, slope);
+             
+             // 移除旧的切线法线
+             this.removeTangentNormalFromChart();
+             
+             // 添加新的切线法线
+             if (this.showingTangent) {
+                 this.addTangentToChart(x, y, slope);
+             }
+             
+             if (this.showingNormal) {
+                 this.addNormalToChart(x, y, slope);
+             }
+             
+         } catch (e) {
+             console.error('计算切线法线时出错:', e);
+             this.clearTangentInfo();
+         }
+     }
+     
+     updateTangentInfo(x, y, slope) {
+         document.getElementById('tangentPoint').textContent = `(${x.toFixed(3)}, ${y.toFixed(3)})`;
+         document.getElementById('tangentSlope').textContent = slope.toFixed(3);
+         
+         // 切线方程: y - y0 = k(x - x0)
+         const b = y - slope * x;
+         const tangentEq = `y = ${slope.toFixed(3)}x ${b >= 0 ? '+' : ''}${b.toFixed(3)}`;
+         document.getElementById('tangentEquation').textContent = tangentEq;
+         
+         // 法线方程: y - y0 = -1/k(x - x0)
+         if (Math.abs(slope) < 0.0001) {
+             document.getElementById('normalEquation').textContent = `x = ${x.toFixed(3)}`;
+         } else {
+             const normalSlope = -1 / slope;
+             const normalB = y - normalSlope * x;
+             const normalEq = `y = ${normalSlope.toFixed(3)}x ${normalB >= 0 ? '+' : ''}${normalB.toFixed(3)}`;
+             document.getElementById('normalEquation').textContent = normalEq;
+         }
+     }
+     
+     clearTangentInfo() {
+         document.getElementById('tangentPoint').textContent = '-';
+         document.getElementById('tangentSlope').textContent = '-';
+         document.getElementById('tangentEquation').textContent = '-';
+         document.getElementById('normalEquation').textContent = '-';
+     }
+     
+     addTangentToChart(x0, y0, slope) {
+         const points = [];
+         const range = (this.xMax - this.xMin) * 0.3; // 切线显示范围
+         
+         for (let x = x0 - range; x <= x0 + range; x += range / 50) {
+             const y = slope * (x - x0) + y0;
+             if (x >= this.xMin && x <= this.xMax && y >= this.yMin && y <= this.yMax) {
+                 points.push({ x: x, y: y });
+             }
+         }
+         
+         this.chart.data.datasets.push({
+             label: '切线',
+             data: points,
+             borderColor: '#ff6b6b',
+             backgroundColor: 'transparent',
+             borderWidth: 2,
+             borderDash: [5, 5],
+             fill: false,
+             pointRadius: 0,
+             pointHoverRadius: 0
+         });
+         
+         this.chart.update('none');
+     }
+     
+     addNormalToChart(x0, y0, slope) {
+         const points = [];
+         const range = (this.xMax - this.xMin) * 0.3;
+         
+         if (Math.abs(slope) < 0.0001) {
+             // 垂直法线
+             for (let y = this.yMin; y <= this.yMax; y += (this.yMax - this.yMin) / 100) {
+                 points.push({ x: x0, y: y });
+             }
+         } else {
+             const normalSlope = -1 / slope;
+             for (let x = x0 - range; x <= x0 + range; x += range / 50) {
+                 const y = normalSlope * (x - x0) + y0;
+                 if (x >= this.xMin && x <= this.xMax && y >= this.yMin && y <= this.yMax) {
+                     points.push({ x: x, y: y });
+                 }
+             }
+         }
+         
+         this.chart.data.datasets.push({
+             label: '法线',
+             data: points,
+             borderColor: '#4ecdc4',
+             backgroundColor: 'transparent',
+             borderWidth: 2,
+             borderDash: [10, 5],
+             fill: false,
+             pointRadius: 0,
+             pointHoverRadius: 0
+         });
+         
+         this.chart.update('none');
+     }
+     
+     removeTangentNormalFromChart() {
+        if (!this.chart) return;
+        
+        this.chart.data.datasets = this.chart.data.datasets.filter(dataset => 
+            dataset.label !== '切线' && dataset.label !== '法线'
+        );
+        
+        this.chart.update('none');
+    }
+    
+    // 零点极值点标注功能
+    showZeros() {
+        this.showingZeros = true;
+        this.findAndDisplayZeros();
+        this.updateCriticalPointsDisplay();
+    }
+    
+    showExtrema() {
+        this.showingExtrema = true;
+        this.findAndDisplayExtrema();
+        this.updateCriticalPointsDisplay();
+    }
+    
+    hideCriticalPoints() {
+        this.showingZeros = false;
+        this.showingExtrema = false;
+        this.criticalPoints.zeros = [];
+        this.criticalPoints.extrema = [];
+        this.removeCriticalPointsFromChart();
+        this.updateCriticalPointsDisplay();
+    }
+    
+    findAndDisplayZeros() {
+        const config = this.functionConfigs[this.currentFunction];
+        if (!config) return;
+        
+        this.criticalPoints.zeros = [];
+        const step = (this.xMax - this.xMin) / 2000;
+        let prevY = null;
+        
+        for (let x = this.xMin; x <= this.xMax; x += step) {
+            try {
+                const y = config.calculate(x, this.parameters);
+                if (!isNaN(y) && isFinite(y)) {
+                    // 检查符号变化（零点）
+                    if (prevY !== null && prevY * y < 0) {
+                        // 使用二分法精确定位零点
+                        const zeroX = this.bisectionMethod(config, x - step, x, this.parameters);
+                        if (zeroX !== null) {
+                            this.criticalPoints.zeros.push({
+                                x: zeroX,
+                                y: 0
+                            });
+                        }
+                    }
+                    prevY = y;
+                }
+            } catch (e) {
+                // 忽略计算错误
+            }
+        }
+        
+        this.addCriticalPointsToChart('zeros');
+    }
+    
+    findAndDisplayExtrema() {
+        const config = this.functionConfigs[this.currentFunction];
+        if (!config) return;
+        
+        this.criticalPoints.extrema = [];
+        const step = (this.xMax - this.xMin) / 2000;
+        const points = [];
+        
+        // 收集所有有效点
+        for (let x = this.xMin; x <= this.xMax; x += step) {
+            try {
+                const y = config.calculate(x, this.parameters);
+                if (!isNaN(y) && isFinite(y)) {
+                    points.push({ x, y });
+                }
+            } catch (e) {
+                // 忽略计算错误
+            }
+        }
+        
+        // 寻找极值点（局部最大值和最小值）
+        for (let i = 1; i < points.length - 1; i++) {
+            const prev = points[i - 1];
+            const curr = points[i];
+            const next = points[i + 1];
+            
+            // 检查是否为极大值
+            if (curr.y > prev.y && curr.y > next.y) {
+                this.criticalPoints.extrema.push({
+                    x: curr.x,
+                    y: curr.y,
+                    type: 'max'
+                });
+            }
+            // 检查是否为极小值
+            else if (curr.y < prev.y && curr.y < next.y) {
+                this.criticalPoints.extrema.push({
+                    x: curr.x,
+                    y: curr.y,
+                    type: 'min'
+                });
+            }
+        }
+        
+        this.addCriticalPointsToChart('extrema');
+    }
+    
+    bisectionMethod(config, a, b, params, tolerance = 1e-6, maxIterations = 50) {
+        let left = a;
+        let right = b;
+        
+        for (let i = 0; i < maxIterations; i++) {
+            const mid = (left + right) / 2;
+            const fMid = config.calculate(mid, params);
+            
+            if (Math.abs(fMid) < tolerance) {
+                return mid;
+            }
+            
+            const fLeft = config.calculate(left, params);
+            if (fLeft * fMid < 0) {
+                right = mid;
+            } else {
+                left = mid;
+            }
+            
+            if (Math.abs(right - left) < tolerance) {
+                return (left + right) / 2;
+            }
+        }
+        
+        return (left + right) / 2;
+    }
+    
+    addCriticalPointsToChart(type) {
+        if (!this.chart) return;
+        
+        // 移除之前的同类型标注点
+        this.chart.data.datasets = this.chart.data.datasets.filter(dataset => 
+            !dataset.label.includes(type === 'zeros' ? '零点' : '极值点')
+        );
+        
+        const points = this.criticalPoints[type];
+        if (points.length === 0) return;
+        
+        if (type === 'zeros') {
+            // 添加零点数据集
+            this.chart.data.datasets.push({
+                label: '零点',
+                data: points,
+                borderColor: '#28a745',
+                backgroundColor: '#28a745',
+                borderWidth: 3,
+                pointRadius: 8,
+                pointHoverRadius: 10,
+                showLine: false,
+                pointStyle: 'circle'
+            });
+        } else {
+            // 分别添加极大值和极小值数据集
+            const maxPoints = points.filter(p => p.type === 'max');
+            const minPoints = points.filter(p => p.type === 'min');
+            
+            if (maxPoints.length > 0) {
+                this.chart.data.datasets.push({
+                    label: '极大值点',
+                    data: maxPoints,
+                    borderColor: '#fd7e14',
+                    backgroundColor: '#fd7e14',
+                    borderWidth: 3,
+                    pointRadius: 8,
+                    pointHoverRadius: 10,
+                    showLine: false,
+                    pointStyle: 'triangle'
+                });
+            }
+            
+            if (minPoints.length > 0) {
+                this.chart.data.datasets.push({
+                    label: '极小值点',
+                    data: minPoints,
+                    borderColor: '#6f42c1',
+                    backgroundColor: '#6f42c1',
+                    borderWidth: 3,
+                    pointRadius: 8,
+                    pointHoverRadius: 10,
+                    showLine: false,
+                    pointStyle: 'rectRot'
+                });
+            }
+        }
+        
+        this.chart.update('none');
+    }
+    
+    removeCriticalPointsFromChart() {
+        if (!this.chart) return;
+        
+        // 移除所有零点和极值点数据集
+        this.chart.data.datasets = this.chart.data.datasets.filter(dataset => 
+            !dataset.label.includes('零点') && 
+            !dataset.label.includes('极值点') &&
+            !dataset.label.includes('极大值点') &&
+            !dataset.label.includes('极小值点')
+        );
+        this.chart.update('none');
+    }
+    
+    updateCriticalPointsDisplay() {
+        const zerosList = document.getElementById('zerosList');
+        const extremaList = document.getElementById('extremaList');
+        
+        // 更新零点显示
+        if (this.criticalPoints.zeros.length > 0) {
+            const zerosText = this.criticalPoints.zeros
+                .map(point => `<span class="point-item">(${point.x.toFixed(3)}, 0)</span>`)
+                .join('');
+            zerosList.innerHTML = zerosText;
+        } else {
+            zerosList.innerHTML = this.showingZeros ? '在当前范围内未找到零点' : '暂无数据';
+        }
+        
+        // 更新极值点显示
+        if (this.criticalPoints.extrema.length > 0) {
+            const extremaText = this.criticalPoints.extrema
+                .map(point => {
+                    const type = point.type === 'max' ? '极大' : '极小';
+                    return `<span class="point-item">${type}: (${point.x.toFixed(3)}, ${point.y.toFixed(3)})</span>`;
+                })
+                .join('');
+            extremaList.innerHTML = extremaText;
+        } else {
+            extremaList.innerHTML = this.showingExtrema ? '在当前范围内未找到极值点' : '暂无数据';
+        }
+    }
 }
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
-    new FunctionPlotter();
+    window.functionPlotter = new FunctionPlotter();
 });
