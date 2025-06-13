@@ -1205,11 +1205,13 @@ header p {
     justify-content: center;
     border: 1px solid rgba(102, 126, 234, 0.2);
     position: relative;
+    touch-action: none; /* 允许Chart.js处理所有触屏事件，包括缩放 */
 }
 
 #functionChart {
     width: 100% !important;
     height: 100% !important;
+    touch-action: none; /* 确保canvas能处理触屏缩放事件 */
 }
 
 /* 响应式设计 */
