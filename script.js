@@ -795,7 +795,14 @@ class FunctionPlotter {
                             pinch: {
                                 enabled: true
                             },
+                            drag: {
+                                enabled: false
+                            },
                             mode: 'xy'
+                        },
+                        limits: {
+                            x: {min: -50, max: 50},
+                            y: {min: -50, max: 50}
                         }
                     }
                 },
